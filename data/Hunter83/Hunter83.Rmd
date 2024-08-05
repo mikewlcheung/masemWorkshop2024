@@ -1,0 +1,92 @@
+---
+title: 'Hunter (1983)'
+author: "Mike W.-L. Cheung (National University of Singapore)"
+date: "21 July 2024"
+output:
+  html_document:
+    keep_md: yes
+    self_contained: yes
+    theme: united
+    toc: yes
+  pdf_document:
+    toc: no
+  word_document: default
+editor_options: 
+  chunk_output_type: console
+---
+
+# Read data
+```{r, message=FALSE}
+library(metaSEM)
+library(readxl)
+
+## Sheets with correlation matrices
+sheets <- as.character(1:14)
+
+## An empty list to store the correlation matrices
+my.R <- list()
+for (i in sheets) {
+  my.R[[i]] <- read_excel("Hunter83.xlsx", sheet=i)
+}
+
+## Convert it to correlation matrices with proper dimension names
+my.R <- lapply(my.R, function(x) {x <- unlist(x)
+                                  x <- matrix(x, ncol=4)
+                                  x <- vechs(x)
+                                  vec2symMat(x, diag=FALSE)})
+
+## Variables used in the analysis
+var.names <- c("Ability", "Job", "Work", "Supervisor")
+
+## Add the dimensions to the correlation matrices
+my.R <- lapply(my.R, function(x) { dimnames(x) <- list(var.names, var.names); x})
+
+## Read study names and sample sizes in sheet "0"
+my.study <- read_excel("Hunter83.xlsx", sheet="0")
+names(my.R) <- my.study$Study
+
+## Sample sizes
+n <- my.study$n
+n
+
+## Show the first two studies
+my.R[1:2]
+
+## Number of studies per bivariate relation
+pattern.na(my.R, show.na=FALSE)
+
+## Total sample size per bivariate relation
+pattern.n(my.R, n)
+```
+
+# Stage 1 analysis: Random-effects model
+```{r}
+random1 <- tssem1(my.R, n, method="REM", RE.type="Diag")
+
+summary(random1)
+```
+
+# Stage 2 analysis: Random-effects model
+```{r}
+model <- "Job ~ A2J*Ability
+          Work ~ A2W*Ability + J2W*Job
+          Supervisor ~ J2S*Job + W2S*Work
+
+          ## Fix the variance of Ability at 1
+          Ability ~~ 1*Ability
+          
+          ## Indirect effect from Ability to Supervisor
+          indirect := A2W*W2S + A2J*J2W*W2S
+"
+
+plot(model, color="yellow")
+
+RAM <- lavaan2RAM(model, obs.variables=c("Ability","Job", "Work","Supervisor"))
+RAM
+
+## intervals.type="LB": likelihood-based CIs
+random2 <- tssem2(random1, RAM=RAM, intervals.type="LB")
+summary(random2)
+
+plot(random2, color="green", layout="spring")
+```
